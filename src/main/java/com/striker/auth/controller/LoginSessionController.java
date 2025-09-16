@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/login-sessions")
+@RequestMapping("/api/v1/loginsessions")
 public class LoginSessionController {
     private final ILoginSessionService iLoginSessionService;
 

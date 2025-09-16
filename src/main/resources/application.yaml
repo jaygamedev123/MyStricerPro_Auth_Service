@@ -15,7 +15,6 @@ spring:
       hibernate:
         format_sql: true
 
-
 management:
   endpoints:
     web:
@@ -44,14 +43,6 @@ logging:
       total-size-cap: 1GB
     triggeringpolicy:
       max-file-size: 10MB
-  logstash:
-    enabled: false
-    host: localhost
-    port: 5000
-    queue-size: 512
-    custom-fields: '{"app":"myapp","env":"prod"}'
-    include-stacktrace: true
-    stacktrace-depth: 30
 
 hibernate:
   dialect: org.hibernate.dialect.PostgreSQLDialect
