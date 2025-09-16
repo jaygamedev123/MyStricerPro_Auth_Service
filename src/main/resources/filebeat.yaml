@@ -1,0 +1,23 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - D:/JayKumar/logs/apps/*.log
+    json.keys_under_root: true
+    json.add_error_key: true
+    json.overwrite_keys: true
+
+# Output to local directory (for testing)
+output.file:
+  path: "D:/JayKumar/logs/filebeat"   # local directory where Filebeat will write logs
+  filename: "springboot-output"  # base name of output files
+  rotate_every_kb: 10000     # rotate file after 10MB
+  number_of_files: 5         # keep last 5 rotated files
+
+#output.elasticsearch:
+#  hosts: ["http://localhost:9200"]
+#  index: "springboot-logs-%{+yyyy.MM.dd}"
+
+# Or send to Logstash
+# output.logstash:
+#   hosts: ["localhost:5044"]
