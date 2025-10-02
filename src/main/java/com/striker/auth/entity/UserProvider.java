@@ -1,5 +1,7 @@
 package com.striker.auth.entity;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import lombok.Data;
@@ -9,9 +11,10 @@ import java.util.UUID;
 
 @Data
 @NoArgsConstructor
-
+@Entity
 public class UserProvider {
 
+    @Id
     private UUID providerDetailsId;
     private UUID userId;
     private String authProvider; // e.g., "local", "google", "facebook"

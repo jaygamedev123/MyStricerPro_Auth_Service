@@ -2,9 +2,9 @@ spring:
   application:
     name: stiker-auth
   datasource:
-    url: ${DB_HOST}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://mystrikerpro-dev-aurora.cluster-ch2u2i2skpr5.ap-south-1.rds.amazonaws.com/mystrikerpro
+    username: masteruser
+    password: NMgQ-boMJMqsKYvi
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
