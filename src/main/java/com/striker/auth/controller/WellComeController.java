@@ -14,7 +14,6 @@ public class WellComeController {
     @GetMapping
     public ResponseEntity<String> greetings() {
         log.info("Inside WellComeController of Auth Service");
-        return ResponseEntity.ok("Response From welcome controller of Auth Service Service")
-                ;
+        return ResponseEntity.ok("Response From welcome controller of Auth Service Service")                ;
     }
 }

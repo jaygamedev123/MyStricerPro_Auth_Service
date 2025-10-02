@@ -3,6 +3,7 @@ package com.striker.auth.service.Impl;
 import com.striker.auth.dto.ApiResponse;
 import com.striker.auth.dto.UserProfileDto;
 import com.striker.auth.entity.UserProfile;
+import com.striker.auth.entity.UserProvider;
 import com.striker.auth.repos.IUserProfileRepo;
 import com.striker.auth.service.IUserProfileService;
 import lombok.extern.slf4j.Slf4j;
@@ -85,10 +86,20 @@ public class UserProfileServiceImpl implements IUserProfileService {
     @Override
     public ApiResponse addUserProfile(UserProfileDto userProfile) {
         log.info("Adding new user profile for username: {}", userProfile.getUsername());
+        var newUserProfile = new UserProfile();
         try {
-            var newUserProfile = new UserProfile();
-            BeanUtils.copyProperties(userProfile, newUserProfile);
+            var existingProfile = iUserProfileRepo.findByEmailOrMobile(userProfile.getEmail(), userProfile.getMobile());
+            if (existingProfile.isPresent()) {
+                log.warn("User profile already exists with email: {} or mobile: {}", userProfile.getEmail(), userProfile.getMobile());
+                existingProfile.get().getUserProviders().add(new UserProvider(userProfile.getAuthProvider()));
+                newUserProfile = existingProfile.get();
+            } else {
+                BeanUtils.copyProperties(userProfile, newUserProfile);
+                newUserProfile.getUserProviders().add(new UserProvider(userProfile.getAuthProvider()));
+            }
+
             var savedProfile = iUserProfileRepo.save(newUserProfile);
+
             log.info("User profile added successfully for username: {}", userProfile.getUsername());
             return ApiResponse.builder().httpStatus(HttpStatus.CREATED).message("User profile created successfully").data(savedProfile).build();
         } catch (Exception e) {
