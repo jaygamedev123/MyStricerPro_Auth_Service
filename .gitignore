@@ -31,3 +31,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Ignore app configs
+src/main/resources/application.yaml
+src/main/resources/application-local.yaml
+
+./application.yaml
+./application-local.yaml
+
+# Ignore all yaml files
+*.yml
+*.yaml
+
+
+
+
