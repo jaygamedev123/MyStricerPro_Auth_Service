@@ -1,32 +1,50 @@
 package com.striker.auth.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import lombok.Data;
+import jakarta.persistence.Table;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.util.UUID;
 
-@Data
+@Getter
+@Setter
+@ToString
 @NoArgsConstructor
 @Entity
-public class UserProvider {
+@Table(name = "user_providers")
+public class UserProvider extends Auditing {
 
     @Id
-    private UUID providerDetailsId;
-    private UUID userId;
-    private String authProvider; // e.g., "local", "google", "facebook"
-    private String providerId; // ID from the auth provider
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
-    //    Create many to one with userProfiles4
+    /**
+     * Authentication provider, e.g. "LOCAL", "GOOGLE", "FACEBOOK"
+     */
+    @Column(name = "auth_provider", nullable = false)
+    private String authProvider;
+
+    /**
+     * ID returned by provider (e.g. Google "sub").
+     */
+    @Column(name = "provider_id", nullable = false)
+    private String providerId;
+
     @ManyToOne
-    @JoinColumn(name = "user_profile_id", nullable = false, insertable = true)
+    @JoinColumn(name = "user_profile_id", nullable = false)
     private UserProfile userProfile;
 
-    public UserProvider(String authProvider) {
+    public UserProvider(String authProvider, String providerId, UserProfile userProfile) {
+        this.id = UUID.randomUUID();
         this.authProvider = authProvider;
+        this.providerId = providerId;
+        this.userProfile = userProfile;
     }
-
 }

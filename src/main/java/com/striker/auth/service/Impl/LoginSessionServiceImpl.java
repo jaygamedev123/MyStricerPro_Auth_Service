@@ -10,110 +10,108 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Service("loginSessionService")
 public class LoginSessionServiceImpl implements ILoginSessionService {
-    private final ILoginSessionRepo iLoginSessionRepo;
 
-    public LoginSessionServiceImpl(ILoginSessionRepo iLoginSessionRepo) {
-        this.iLoginSessionRepo = iLoginSessionRepo;
+    private final ILoginSessionRepo loginSessionRepo;
+
+    public LoginSessionServiceImpl(ILoginSessionRepo loginSessionRepo) {
+        this.loginSessionRepo = loginSessionRepo;
     }
 
     @Override
     public ApiResponse createLoginUserSession(LoginSessionDto loginSessionDto) {
-        log.debug("Creating login session for user ID: {}", loginSessionDto.getUserId());
-        log.info("Login session details: {}", loginSessionDto);
         try {
-            LoginSession entity = new LoginSession();
-            BeanUtils.copyProperties(loginSessionDto, entity);
+            LoginSession session = new LoginSession();
+            BeanUtils.copyProperties(loginSessionDto, session);
+            if (session.getSessionId() == null) {
+                session.setSessionId(UUID.randomUUID());
+            }
+            session.setLoginTime(LocalDateTime.now());
+            session.setActive(true);
 
-            LoginSession save = this.iLoginSessionRepo.save(entity);
-            log.debug("Login session created successfully for user ID: {}", loginSessionDto);
+            LoginSession saved = loginSessionRepo.save(session);
 
             return ApiResponse.builder()
-                    .data(save)
-                    .httpStatus(HttpStatus.OK)
+                    .httpStatus(HttpStatus.CREATED)
+                    .success(true)
+                    .message("Login session created successfully")
+                    .data(saved)
                     .build();
         } catch (Exception e) {
-            log.error("Error creating login session: {}", e.getMessage());
-            return ApiResponse.builder()
-                    .httpStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .errorMessage("Error creating login session: " + e.getMessage())
-                    .build();
+            log.error("Error creating login session", e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error creating login session");
         }
     }
 
     @Override
     public ApiResponse getLoginUserSessions(UUID userId) {
-        log.debug("Retrieving login sessions for user ID: {}", userId);
         try {
-            LoginSession loginSession = this.iLoginSessionRepo.findByUserId(userId);
-            if (loginSession != null) {
-                return ApiResponse.builder()
-                        .data(loginSession)
-                        .httpStatus(HttpStatus.OK)
-                        .build();
-            } else {
+            LoginSession session = loginSessionRepo.findByUserId(userId);
+            if (session == null) {
                 return ApiResponse.builder()
                         .httpStatus(HttpStatus.NOT_FOUND)
-                        .errorMessage("No active sessions found for user ID: " + userId)
+                        .success(false)
+                        .message("No active session found for userId: " + userId)
                         .build();
             }
-        } catch (Exception e) {
-            log.error("Error retrieving login sessions: {}", e.getMessage());
+
             return ApiResponse.builder()
-                    .httpStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .errorMessage("Error retrieving login sessions: " + e.getMessage())
+                    .httpStatus(HttpStatus.OK)
+                    .success(true)
+                    .data(session)
                     .build();
+        } catch (Exception e) {
+            log.error("Error retrieving login session", e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error retrieving login session");
         }
     }
 
     @Override
     public ApiResponse invalidateLoginUserSession(UUID sessionId) {
-        log.debug("Invalidating login session for sessionId: {}", sessionId);
-        LoginSession loginSession = this.iLoginSessionRepo.invalidateUserSession(sessionId);
         try {
-            log.info("Login session invalidated for sessionId: {}", sessionId);
-            if (loginSession != null) {
-                return ApiResponse.builder()
-                        .data(loginSession)
-                        .httpStatus(HttpStatus.OK)
-                        .build();
-            } else {
+            LoginSession session = loginSessionRepo.findById(sessionId).orElse(null);
+            if (session == null || !session.isActive()) {
                 return ApiResponse.builder()
                         .httpStatus(HttpStatus.NOT_FOUND)
-                        .errorMessage("No active session found to invalidate for sessionId: " + sessionId)
+                        .success(false)
+                        .message("No active session found to invalidate for sessionId: " + sessionId)
                         .build();
             }
-        } catch (Exception e) {
-            log.error("Error invalidating login session: {}", e.getMessage());
+
+            session.setActive(false);
+            session.setLoggedOut(LocalDateTime.now());
+            loginSessionRepo.save(session);
+
             return ApiResponse.builder()
-                    .httpStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .errorMessage("Error invalidating login session: " + e.getMessage())
+                    .httpStatus(HttpStatus.OK)
+                    .success(true)
+                    .message("Login session invalidated successfully")
+                    .data(session)
                     .build();
+        } catch (Exception e) {
+            log.error("Error invalidating login session", e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error invalidating login session");
         }
     }
 
     @Override
     public ApiResponse getListOfActiveSessions() {
-        log.debug("Retrieving list of active login sessions");
         try {
-            var activeSessions = this.iLoginSessionRepo.findAll().stream()
-                    .filter(LoginSession::isActive)
-                    .toList();
-
+            List<LoginSession> activeSessions = loginSessionRepo.findByIsActiveTrue();
             return ApiResponse.builder()
-                    .data(activeSessions)
                     .httpStatus(HttpStatus.OK)
+                    .success(true)
+                    .data(activeSessions)
                     .build();
         } catch (Exception e) {
-            log.error("Error retrieving active login sessions: {}", e.getMessage());
-            return ApiResponse.builder()
-                    .httpStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .errorMessage("Error retrieving active login sessions: " + e.getMessage())
-                    .build();
+            log.error("Error retrieving active login sessions", e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error retrieving active login sessions");
         }
     }
 }
