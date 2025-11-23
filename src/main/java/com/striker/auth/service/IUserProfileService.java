@@ -1,6 +1,7 @@
 package com.striker.auth.service;
 
 import com.striker.auth.dto.ApiResponse;
+import com.striker.auth.dto.GuestLoginRequestDto;
 import com.striker.auth.dto.SocialLoginRequestDto;
 import com.striker.auth.dto.UserProfileDto;
 import org.springframework.stereotype.Service;
@@ -19,4 +20,7 @@ public interface IUserProfileService {
     ApiResponse addUserProfile(UserProfileDto userProfile);
 
     ApiResponse handleSocialLogin(SocialLoginRequestDto request);
+
+    ApiResponse handleGuestLogin(GuestLoginRequestDto request);
+
 }

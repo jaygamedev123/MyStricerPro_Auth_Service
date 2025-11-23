@@ -1,5 +1,6 @@
 package com.striker.auth.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -39,6 +40,7 @@ public class UserProvider extends Auditing {
 
     @ManyToOne
     @JoinColumn(name = "user_profile_id", nullable = false)
+    @JsonIgnore
     private UserProfile userProfile;
 
     public UserProvider(String authProvider, String providerId, UserProfile userProfile) {
