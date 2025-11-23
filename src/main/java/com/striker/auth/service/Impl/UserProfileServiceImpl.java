@@ -3,6 +3,7 @@ package com.striker.auth.service.Impl;
 import com.striker.auth.dto.ApiResponse;
 import com.striker.auth.dto.SocialLoginRequestDto;
 import com.striker.auth.dto.UserProfileDto;
+import com.striker.auth.dto.GuestLoginRequestDto;
 import com.striker.auth.entity.UserProfile;
 import com.striker.auth.entity.UserProvider;
 import com.striker.auth.repos.IUserProfileRepo;
@@ -15,10 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service("userProfileService")
@@ -170,8 +168,6 @@ public class UserProfileServiceImpl implements IUserProfileService {
                 // Existing user -> load their profile
                 userProfile = userProvider.getUserProfile();
                 // Optionally update profile fields (name, picture, etc.)
-                userProfile.setFName(request.firstName());
-                userProfile.setLName(request.lastName());
                 userProfile.setUsername(request.email());
                 userProfile.setProfilePic(request.pictureUrl());
                 userProfile.setLastLogin(LocalDateTime.now().toString());
@@ -180,8 +176,6 @@ public class UserProfileServiceImpl implements IUserProfileService {
                 userProfile = new UserProfile();
                 userProfile.setUserId(UUID.randomUUID());  // generate your userId here
                 userProfile.setUsername(request.email());
-                userProfile.setFName(request.firstName());
-                userProfile.setLName(request.lastName());
                 userProfile.setEmail(request.email());
                 userProfile.setProfilePic(request.pictureUrl());
                 userProfile.setRole("USER");
@@ -211,9 +205,6 @@ public class UserProfileServiceImpl implements IUserProfileService {
                     Map.of(
                             "userId", userProfile.getUserId(),
                             "email", userProfile.getEmail(),
-                            "firstName", userProfile.getFName(),
-                            "lastName", userProfile.getLName(),
-                            "pictureUrl", userProfile.getProfilePic(),
                             "jwt", jwt,
                             "provider", request.provider()
                     )
@@ -221,6 +212,55 @@ public class UserProfileServiceImpl implements IUserProfileService {
         } catch (Exception e) {
             log.error("Error handling social login", e);
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error handling social login");
+        }
+    }
+
+    @Override
+    public ApiResponse handleGuestLogin(GuestLoginRequestDto request) {
+
+        try {
+            // 1. Create UserProfile
+            UserProfile user = new UserProfile();
+            UUID uuid = UUID.randomUUID();
+
+            user.setUserId(uuid);
+            user.setRole("GUEST");
+            user.setStatus(true);
+            user.setLastLogin(LocalDateTime.now().toString());
+
+            // username like Guest-3F9A12CD
+            String shortId = uuid.toString().substring(0, 8).toUpperCase();
+            user.setUsername("Guest-" + shortId);
+
+            // 2. Create UserProvider
+            UserProvider provider = new UserProvider();
+            provider.setId(UUID.randomUUID());
+            provider.setAuthProvider("GUEST");
+            provider.setProviderId(uuid.toString()); // simple approach
+            provider.setUserProfile(user);
+
+            user.setUserProviders(Set.of(provider));
+
+            // 3. Save user
+            user = userProfileRepo.save(user);
+
+            // 4. Create JWT
+            String jwt = jwtService.generateTokenForUser(user, "GUEST");
+
+            // 5. Response
+            return ApiResponse.success(
+                    Map.of(
+                            "userId", user.getUserId(),
+                            "username", user.getUsername(),
+                            "provider", "GUEST",
+                            "jwt", jwt,
+                            "isGuest", true
+                    )
+            );
+
+        } catch (Exception e) {
+            log.error("Error creating guest user", e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Guest login failed");
         }
     }
 }
