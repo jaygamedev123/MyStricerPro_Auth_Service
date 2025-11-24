@@ -263,4 +263,29 @@ public class UserProfileServiceImpl implements IUserProfileService {
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Guest login failed");
         }
     }
+
+    @Override
+    public ApiResponse updateProfilePic(UUID userId, String profilePicUrl) {
+        try {
+            var userOpt = userProfileRepo.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ApiResponse.error(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            UserProfile user = userOpt.get();
+            user.setProfilePic(profilePicUrl);
+            userProfileRepo.save(user);
+
+            return ApiResponse.success(
+                    Map.of(
+                            "userId", user.getUserId(),
+                            "profilePic", user.getProfilePic()
+                    )
+            );
+
+        } catch (Exception e) {
+            log.error("Error updating profile pic for userId: {}", userId, e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to update profile picture");
+        }
+    }
 }

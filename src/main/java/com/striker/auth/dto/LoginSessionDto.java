@@ -19,5 +19,4 @@ public class LoginSessionDto {
     private boolean isPlaying; // Planning or available for joining game
     private String longitude;
     private String latitude;
-
 }
