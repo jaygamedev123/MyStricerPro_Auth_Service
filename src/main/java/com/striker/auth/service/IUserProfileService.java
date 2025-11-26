@@ -23,4 +23,6 @@ public interface IUserProfileService {
 
     ApiResponse handleGuestLogin(GuestLoginRequestDto request);
 
+    ApiResponse updateProfilePic(UUID userId, String profilePicUrl);
+
 }

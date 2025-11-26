@@ -1,5 +1,7 @@
 package com.striker.auth.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,7 +12,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -27,18 +28,20 @@ public class UserProfile extends Auditing {
     private UUID userId;
 
     private String username;
-    private String fName;
-    private String lName;
+    private String fullName;
     private String mobile;
+    private String sex;
     private String profilePic;
     @Column(unique = true)
     private String email;
-    private LocalDateTime dob;
+    private String dob;
     private String lastLogin;
     private String role;        // e.g., "USER", "ADMIN"
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private boolean status;     // active / inactive
     private String password;    // optional; for social login can stay null
 
     @OneToMany(mappedBy = "userProfile", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private Set<UserProvider> userProviders = new HashSet<>();
 }

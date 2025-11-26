@@ -1,11 +1,9 @@
 package com.striker.auth.dto;
 
-import com.striker.auth.entity.Auditing;
-import jakarta.persistence.Entity;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Setter
@@ -13,9 +11,9 @@ import java.util.UUID;
 public class UserProfileDto  {
     private UUID userId;
     private String username;
-    private String fName;
-    private String lName;
+    private String fullName;
     private String mobile;
+    private String sex;
     private String email;
     private String password;
     private boolean status;
@@ -24,6 +22,6 @@ public class UserProfileDto  {
     private String authProvider; // e.g., "local", "google", "facebook"
     private String providerId; // ID from the auth provider
     private String role; // e.g., "USER", "ADMIN"
-    private LocalDateTime dob;
+    private String dob;
 
 }
