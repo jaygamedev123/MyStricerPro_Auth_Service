@@ -31,7 +31,7 @@ public class UserProfileController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/updateuserprofiles")
+    @PatchMapping("/updateuserprofiles")
     public ResponseEntity<ApiResponse> updateUserProfile(@RequestBody UserProfileDto userProfileDto) {
         log.info("Received request to update user profile: {}", userProfileDto);
         ApiResponse response = userProfileService.updateUserProfile(userProfileDto);
