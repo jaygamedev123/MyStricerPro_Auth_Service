@@ -234,23 +234,38 @@ public class UserProfileServiceImpl implements IUserProfileService {
             if (existingProvider != null) {
                 // Provider exists → Update and return existing user
                 userProfile = existingProvider.getUserProfile();
-                //userProfile.setProfilePic(request.pictureUrl());
+
+                // If incoming provider sent a username and profile has none, set it (sanitized + unique)
+                String incomingUsername = request.username();
+                if ((userProfile.getUsername() == null || userProfile.getUsername().isBlank())
+                        && incomingUsername != null && !incomingUsername.isBlank()) {
+                    userProfile.setUsername(
+                            generateUniqueUsername(incomingUsername, request.email(), request.fullName(), userProfile.getUserId())
+                    );
+                }
+
+                // Update optional fields only if provided (avoid clearing)
+                if (request.pictureUrl() != null && !request.pictureUrl().isBlank()) {
+                    userProfile.setProfilePic(request.pictureUrl());
+                }
+                if (request.fullName() != null && !request.fullName().isBlank()
+                        && (userProfile.getFullName() == null || userProfile.getFullName().isBlank())) {
+                    userProfile.setFullName(request.fullName());
+                }
                 userProfile.setLastLogin(LocalDateTime.now().toString());
-                //userProfile.setFullName(request.fullName());
-
-
             } else {
-                //No provider mapping → Check if email already exists
+                // No provider mapping → Check if email already exists
                 Optional<UserProfile> emailUserOpt = userProfileRepo.findByEmail(email);
                 if (emailUserOpt.isPresent()) {
-                    //Email exists → BLOCK THE USER CREATION
+                    // Email exists → BLOCK THE USER CREATION
                     return ApiResponse.error(HttpStatus.CONFLICT,
                             "Email already exists. Please login with correct provider.");
                 }
 
                 // Email is UNIQUE → Create new user
                 userProfile = new UserProfile();
-                userProfile.setUserId(UUID.randomUUID());
+                UUID newUserId = UUID.randomUUID();
+                userProfile.setUserId(newUserId);
                 userProfile.setEmail(email);
                 userProfile.setFullName(request.fullName());
                 userProfile.setProfilePic(request.pictureUrl());
@@ -259,9 +274,9 @@ public class UserProfileServiceImpl implements IUserProfileService {
                 userProfile.setLastLogin(LocalDateTime.now().toString());
                 userProfile.setUserProviders(new HashSet<>());
 
-                // Generate unique username
+                // Generate username: prefer provider's username if present, otherwise fullName/email
                 userProfile.setUsername(
-                        generateUniqueUsername(request.email(), request.fullName(), null)
+                        generateUniqueUsername(request.username(), request.email(), request.fullName(), newUserId)
                 );
 
                 // Create provider link
@@ -279,16 +294,16 @@ public class UserProfileServiceImpl implements IUserProfileService {
 
             // Generate JWT
             String jwt = jwtService.generateTokenForUser(userProfile, request.provider());
-
-            return ApiResponse.success(
-                    Map.of(
-                            "userId", userProfile.getUserId(),
-                            "email", userProfile.getEmail(),
-                            "fullname", userProfile.getFullName(),
-                            "jwt", jwt,
-                            "provider", request.provider()
-                    )
+            Map<String, Object> responseMap = buildSafeMap(
+                    "userId", userProfile.getUserId(),
+                    "email", userProfile.getEmail(),
+                    "fullName", userProfile.getFullName(),
+                    "username", userProfile.getUsername(),
+                    "jwt", jwt,
+                    "provider", request.provider()
             );
+
+            return ApiResponse.success(responseMap);
 
         } catch (DataIntegrityViolationException ex) {
             // In case DB unique constraint catches duplicates
@@ -298,6 +313,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error handling social login");
         }
     }
+
 
 
     @Override
@@ -349,48 +365,67 @@ public class UserProfileServiceImpl implements IUserProfileService {
         }
     }
 
-    private String generateUniqueUsername(String email, String fullName, UUID userId) {
-
+    private String generateUniqueUsername(String incomingUsername, String email, String fullName, UUID userId) {
+        // 1) If user exists and already has username, preserve it.
         if (userId != null) {
             Optional<UserProfile> existingOpt = userProfileRepo.findById(userId);
             if (existingOpt.isPresent()) {
                 String existingUsername = existingOpt.get().getUsername();
                 if (existingUsername != null && !existingUsername.isBlank()) {
-                    return existingUsername;  // Don't regenerate
+                    return existingUsername;
                 }
             }
         }
-        //derive base username
-        String base;
 
-        // If full name is available, prefer it
-        if (fullName != null && !fullName.isBlank()) {
-            base = fullName
-                    .trim()
-                    .toLowerCase()
-                    .replaceAll("[^a-z0-9 ]", "")   // remove special chars
-                    .replaceAll("\\s+", ".");       // spaces → dots
-        } else {
-            // fallback to email before @
-            base = email.contains("@")
-                    ? email.substring(0, email.indexOf("@"))
-                    : email;
+        // Try incoming username first
+        String base = sanitizeUsername(incomingUsername);
+
+        // Then fullName
+        if ((base == null || base.isBlank()) && fullName != null && !fullName.isBlank()) {
+            base = sanitizeUsername(fullName);
         }
 
-        // ensure we don't start or end with dot
+        // Then email local-part
+        if (base == null || base.isBlank()) {
+            String local = (email != null && email.contains("@")) ? email.substring(0, email.indexOf("@")) : email;
+            base = sanitizeUsername(local);
+            if (base == null || base.isBlank()) {
+                base = "user" + UUID.randomUUID().toString().substring(0, 8);
+            }
+        }
+
+        // final trim/collapse
         base = base.replaceAll("^\\.+", "").replaceAll("\\.+$", "");
+        if (base.isBlank()) {
+            base = "user" + UUID.randomUUID().toString().substring(0, 8);
+        }
 
-        // generate unique username
-        String finalUsername = base;
+        // ensure uniqueness
+        String candidate = base;
         int counter = 1;
-
-        while (userProfileRepo.existsByUsername(finalUsername)) {
-            finalUsername = base + "_" + counter;
+        while (userProfileRepo.existsByUsername(candidate)) {
+            candidate = base + "_" + counter;
             counter++;
         }
-
-        return finalUsername;
+        return candidate;
     }
+
+    private String sanitizeUsername(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().toLowerCase();
+        // replace spaces with dots
+        s = s.replaceAll("\\s+", ".");
+        // allow only a-z0-9 . _ - characters
+        s = s.replaceAll("[^a-z0-9._-]", "");
+        // collapse repeated separators to a single dot
+        s = s.replaceAll("[._-]{2,}", ".");
+        // trim leading/trailing separators
+        s = s.replaceAll("^[._-]+", "").replaceAll("[._-]+$", "");
+        // enforce max length (optional)
+        if (s.length() > 30) s = s.substring(0, 30);
+        return s;
+    }
+
 
 
     @Override
@@ -416,5 +451,16 @@ public class UserProfileServiceImpl implements IUserProfileService {
             log.error("Error updating profile pic for userId: {}", userId, e);
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to update profile picture");
         }
+    }
+
+    private static Map<String, Object> buildSafeMap(Object... keysAndValues) {
+        Map<String, Object> map = new HashMap<>();
+        for (int i = 0; i + 1 < keysAndValues.length; i += 2) {
+            String key = (String) keysAndValues[i];
+            Object val = keysAndValues[i + 1];
+            if (key == null) continue;
+            if (val != null) map.put(key, val);
+        }
+        return Collections.unmodifiableMap(map);
     }
 }

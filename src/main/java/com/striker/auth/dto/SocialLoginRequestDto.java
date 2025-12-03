@@ -5,6 +5,7 @@ public record SocialLoginRequestDto(
         String providerUserId,  // Google `sub`
         String email,
         String fullName,
+        String username,
         String pictureUrl
 ) {
 }
