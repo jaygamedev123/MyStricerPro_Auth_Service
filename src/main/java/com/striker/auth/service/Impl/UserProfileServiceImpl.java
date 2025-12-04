@@ -12,6 +12,7 @@ import com.striker.auth.service.IUserProfileService;
 import com.striker.auth.service.JwtService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -60,36 +61,96 @@ public class UserProfileServiceImpl implements IUserProfileService {
     }
 
     @Override
-    public ApiResponse updateUserProfile(UserProfileDto userProfileDto) {
-        log.info("Updating user profile for userId: {}", userProfileDto.getUserId());
-        if (userProfileDto.getUserId() == null) {
+    public ApiResponse updateUserProfile(UserProfileDto dto) {
+        log.info("Updating user profile for userId: {}", dto.getUserId());
+
+        if (dto.getUserId() == null) {
             return ApiResponse.error(HttpStatus.BAD_REQUEST, "userId is required for update");
         }
+
         try {
-            Optional<UserProfile> existingProfileOpt = userProfileRepo.findById(userProfileDto.getUserId());
-            if (existingProfileOpt.isEmpty()) {
-                return ApiResponse.builder()
-                        .httpStatus(HttpStatus.NOT_FOUND)
-                        .success(false)
-                        .message("User profile not found")
-                        .build();
+            Optional<UserProfile> opt = userProfileRepo.findById(dto.getUserId());
+            if (opt.isEmpty()) {
+                return ApiResponse.error(HttpStatus.NOT_FOUND, "User profile not found");
             }
 
-            UserProfile existing = existingProfileOpt.get();
-            BeanUtils.copyProperties(userProfileDto, existing, "userId", "userProviders");
+            UserProfile existing = opt.get();
+
+            // Email update (only if provided AND not empty)
+            if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
+                String newEmail = dto.getEmail().trim().toLowerCase(Locale.ROOT);
+
+                if (!newEmail.equalsIgnoreCase(existing.getEmail())) {
+                    if (userProfileRepo.findByEmail(newEmail).isPresent()) {
+                        return ApiResponse.error(HttpStatus.CONFLICT, "Email already in use");
+                    }
+                    existing.setEmail(newEmail);
+                }
+            }
+
+            // Username update (validate uniqueness)
+            if (dto.getUsername() != null && !dto.getUsername().trim().isEmpty()) {
+                String newUsername = dto.getUsername().trim();
+
+                if (!newUsername.equals(existing.getUsername())) {
+                    if (userProfileRepo.existsByUsername(newUsername)) {
+                        return ApiResponse.error(HttpStatus.CONFLICT, "Username already in use");
+                    }
+                    existing.setUsername(newUsername);
+                }
+            }
+
+            // Full name
+            if (dto.getFullName() != null && !dto.getFullName().trim().isEmpty()) {
+                existing.setFullName(dto.getFullName().trim());
+            }
+
+            // Mobile
+            if (dto.getMobile() != null && !dto.getMobile().trim().isEmpty()) {
+                existing.setMobile(dto.getMobile().trim());
+            }
+
+            // Sex
+            if (dto.getSex() != null && !dto.getSex().trim().isEmpty()) {
+                existing.setSex(dto.getSex().trim());
+            }
+
+            // Profile Pic
+            if (dto.getProfilePic() != null && !dto.getProfilePic().trim().isEmpty()) {
+                existing.setProfilePic(dto.getProfilePic());
+            }
+
+            // DOB
+            if (dto.getDob() != null && !dto.getDob().trim().isEmpty()) {
+                existing.setDob(dto.getDob().trim());
+            }
+
+            // Role — only allow change if provided
+            if (dto.getRole() != null && !dto.getRole().trim().isEmpty()) {
+                existing.setRole(dto.getRole().trim());
+            }
+
+
+            // Password — update only if provided
+            if (dto.getPassword() != null && !dto.getPassword().trim().isEmpty()) {
+                existing.setPassword(dto.getPassword().trim());
+            }
+
             UserProfile saved = userProfileRepo.save(existing);
 
-            return ApiResponse.builder()
-                    .httpStatus(HttpStatus.OK)
-                    .success(true)
-                    .message("User profile updated successfully")
-                    .data(saved)
-                    .build();
+            return ApiResponse.success(saved);
+
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Unique constraint violation updating user {}", dto.getUserId(), ex);
+            return ApiResponse.error(HttpStatus.CONFLICT,
+                    "Duplicate email or username");
         } catch (Exception e) {
-            log.error("Error updating user profile for userId: {}", userProfileDto.getUserId(), e);
-            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error updating user profile");
+            log.error("Error updating user profile for userId: {}", dto.getUserId(), e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error updating user profile");
         }
     }
+
 
     @Override
     public ApiResponse deleteUserProfile(UUID userId) {
@@ -118,10 +179,9 @@ public class UserProfileServiceImpl implements IUserProfileService {
     public ApiResponse addUserProfile(UserProfileDto userProfileDto) {
         log.info("Adding new user profile for email: {}", userProfileDto.getEmail());
         try {
-            // Check if user already exists by email or mobile
-            Optional<UserProfile> existingOpt = userProfileRepo.findByEmailOrMobile(
-                    userProfileDto.getEmail(),
-                    userProfileDto.getMobile()
+            // Check if user already exists by email
+            Optional<UserProfile> existingOpt = userProfileRepo.findByEmail(
+                    userProfileDto.getEmail()
             );
 
             UserProfile profile;
@@ -155,37 +215,71 @@ public class UserProfileServiceImpl implements IUserProfileService {
 
     @Override
     public ApiResponse handleSocialLogin(SocialLoginRequestDto request) {
-        log.info("Handling social login for provider: {} and providerUserId: {}", request.provider(), request.providerUserId());
+        log.info("Handling social login for provider: {} and providerUserId: {}",
+                request.provider(), request.providerUserId());
         try {
-            // 1. Check if we already have a user with this providerUserId
-            UserProvider userProvider = userProviderRepo
+            String email = request.email();
+            if (email == null || email.isBlank()) {
+                return ApiResponse.error(HttpStatus.BAD_REQUEST,
+                        "Email is required for social login");
+            }
+
+            // Find existing provider mapping
+            UserProvider existingProvider = userProviderRepo
                     .findByAuthProviderAndProviderId(request.provider(), request.providerUserId())
                     .orElse(null);
 
             UserProfile userProfile;
 
-            if (userProvider != null) {
-                // Existing user -> load their profile
-                userProfile = userProvider.getUserProfile();
-                // Optionally update profile fields (name, picture, etc.)
-                userProfile.setUsername(request.email());
-                userProfile.setProfilePic(request.pictureUrl());
+            if (existingProvider != null) {
+                // Provider exists → Update and return existing user
+                userProfile = existingProvider.getUserProfile();
+
+                // If incoming provider sent a username and profile has none, set it (sanitized + unique)
+                String incomingUsername = request.username();
+                if ((userProfile.getUsername() == null || userProfile.getUsername().isBlank())
+                        && incomingUsername != null && !incomingUsername.isBlank()) {
+                    userProfile.setUsername(
+                            generateUniqueUsername(incomingUsername, request.email(), request.fullName(), userProfile.getUserId())
+                    );
+                }
+
+                // Update optional fields only if provided (avoid clearing)
+                if (request.pictureUrl() != null && !request.pictureUrl().isBlank()) {
+                    userProfile.setProfilePic(request.pictureUrl());
+                }
+                if (request.fullName() != null && !request.fullName().isBlank()
+                        && (userProfile.getFullName() == null || userProfile.getFullName().isBlank())) {
+                    userProfile.setFullName(request.fullName());
+                }
                 userProfile.setLastLogin(LocalDateTime.now().toString());
             } else {
-                // 2. Create a new UserProfile
+                // No provider mapping → Check if email already exists
+                Optional<UserProfile> emailUserOpt = userProfileRepo.findByEmail(email);
+                if (emailUserOpt.isPresent()) {
+                    // Email exists → BLOCK THE USER CREATION
+                    return ApiResponse.error(HttpStatus.CONFLICT,
+                            "Email already exists. Please login with correct provider.");
+                }
+
+                // Email is UNIQUE → Create new user
                 userProfile = new UserProfile();
-                userProfile.setUserId(UUID.randomUUID());  // generate your userId here
-                userProfile.setUsername(request.email());
-                userProfile.setEmail(request.email());
+                UUID newUserId = UUID.randomUUID();
+                userProfile.setUserId(newUserId);
+                userProfile.setEmail(email);
+                userProfile.setFullName(request.fullName());
                 userProfile.setProfilePic(request.pictureUrl());
                 userProfile.setRole("USER");
                 userProfile.setStatus(true);
                 userProfile.setLastLogin(LocalDateTime.now().toString());
-
-                // Initialize providers set
                 userProfile.setUserProviders(new HashSet<>());
 
-                // 3. Create UserProvider entry
+                // Generate username: prefer provider's username if present, otherwise fullName/email
+                userProfile.setUsername(
+                        generateUniqueUsername(request.username(), request.email(), request.fullName(), newUserId)
+                );
+
+                // Create provider link
                 UserProvider newProvider = new UserProvider();
                 newProvider.setId(UUID.randomUUID());
                 newProvider.setAuthProvider(request.provider());
@@ -195,31 +289,38 @@ public class UserProfileServiceImpl implements IUserProfileService {
                 userProfile.getUserProviders().add(newProvider);
             }
 
-            // 4. Save everything
+            // Save user
             userProfile = userProfileRepo.save(userProfile);
 
-            // 5. Generate your own JWT using userProfile.getUserId() as subject
+            // Generate JWT
             String jwt = jwtService.generateTokenForUser(userProfile, request.provider());
-
-            return ApiResponse.success(
-                    Map.of(
-                            "userId", userProfile.getUserId(),
-                            "email", userProfile.getEmail(),
-                            "jwt", jwt,
-                            "provider", request.provider()
-                    )
+            Map<String, Object> responseMap = buildSafeMap(
+                    "userId", userProfile.getUserId(),
+                    "email", userProfile.getEmail(),
+                    "fullName", userProfile.getFullName(),
+                    "username", userProfile.getUsername(),
+                    "jwt", jwt,
+                    "provider", request.provider()
             );
+
+            return ApiResponse.success(responseMap);
+
+        } catch (DataIntegrityViolationException ex) {
+            // In case DB unique constraint catches duplicates
+            return ApiResponse.error(HttpStatus.CONFLICT, "Email already exists");
         } catch (Exception e) {
             log.error("Error handling social login", e);
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error handling social login");
         }
     }
 
+
+
     @Override
     public ApiResponse handleGuestLogin(GuestLoginRequestDto request) {
 
         try {
-            // 1. Create UserProfile
+            // Create UserProfile
             UserProfile user = new UserProfile();
             UUID uuid = UUID.randomUUID();
 
@@ -232,7 +333,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
             String shortId = uuid.toString().substring(0, 8).toUpperCase();
             user.setUsername("Guest-" + shortId);
 
-            // 2. Create UserProvider
+            // Create UserProvider
             UserProvider provider = new UserProvider();
             provider.setId(UUID.randomUUID());
             provider.setAuthProvider("GUEST");
@@ -241,13 +342,13 @@ public class UserProfileServiceImpl implements IUserProfileService {
 
             user.setUserProviders(Set.of(provider));
 
-            // 3. Save user
+            // Save user
             user = userProfileRepo.save(user);
 
-            // 4. Create JWT
+            // Create JWT
             String jwt = jwtService.generateTokenForUser(user, "GUEST");
 
-            // 5. Response
+            // Response
             return ApiResponse.success(
                     Map.of(
                             "userId", user.getUserId(),
@@ -262,5 +363,104 @@ public class UserProfileServiceImpl implements IUserProfileService {
             log.error("Error creating guest user", e);
             return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Guest login failed");
         }
+    }
+
+    private String generateUniqueUsername(String incomingUsername, String email, String fullName, UUID userId) {
+        // 1) If user exists and already has username, preserve it.
+        if (userId != null) {
+            Optional<UserProfile> existingOpt = userProfileRepo.findById(userId);
+            if (existingOpt.isPresent()) {
+                String existingUsername = existingOpt.get().getUsername();
+                if (existingUsername != null && !existingUsername.isBlank()) {
+                    return existingUsername;
+                }
+            }
+        }
+
+        // Try incoming username first
+        String base = sanitizeUsername(incomingUsername);
+
+        // Then fullName
+        if ((base == null || base.isBlank()) && fullName != null && !fullName.isBlank()) {
+            base = sanitizeUsername(fullName);
+        }
+
+        // Then email local-part
+        if (base == null || base.isBlank()) {
+            String local = (email != null && email.contains("@")) ? email.substring(0, email.indexOf("@")) : email;
+            base = sanitizeUsername(local);
+            if (base == null || base.isBlank()) {
+                base = "user" + UUID.randomUUID().toString().substring(0, 8);
+            }
+        }
+
+        // final trim/collapse
+        base = base.replaceAll("^\\.+", "").replaceAll("\\.+$", "");
+        if (base.isBlank()) {
+            base = "user" + UUID.randomUUID().toString().substring(0, 8);
+        }
+
+        // ensure uniqueness
+        String candidate = base;
+        int counter = 1;
+        while (userProfileRepo.existsByUsername(candidate)) {
+            candidate = base + "_" + counter;
+            counter++;
+        }
+        return candidate;
+    }
+
+    private String sanitizeUsername(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().toLowerCase();
+        // replace spaces with dots
+        s = s.replaceAll("\\s+", ".");
+        // allow only a-z0-9 . _ - characters
+        s = s.replaceAll("[^a-z0-9._-]", "");
+        // collapse repeated separators to a single dot
+        s = s.replaceAll("[._-]{2,}", ".");
+        // trim leading/trailing separators
+        s = s.replaceAll("^[._-]+", "").replaceAll("[._-]+$", "");
+        // enforce max length (optional)
+        if (s.length() > 30) s = s.substring(0, 30);
+        return s;
+    }
+
+
+
+    @Override
+    public ApiResponse updateProfilePic(UUID userId, String profilePicUrl) {
+        try {
+            var userOpt = userProfileRepo.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ApiResponse.error(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            UserProfile user = userOpt.get();
+            user.setProfilePic(profilePicUrl);
+            userProfileRepo.save(user);
+
+            return ApiResponse.success(
+                    Map.of(
+                            "userId", user.getUserId(),
+                            "profilePic", user.getProfilePic()
+                    )
+            );
+
+        } catch (Exception e) {
+            log.error("Error updating profile pic for userId: {}", userId, e);
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to update profile picture");
+        }
+    }
+
+    private static Map<String, Object> buildSafeMap(Object... keysAndValues) {
+        Map<String, Object> map = new HashMap<>();
+        for (int i = 0; i + 1 < keysAndValues.length; i += 2) {
+            String key = (String) keysAndValues[i];
+            Object val = keysAndValues[i + 1];
+            if (key == null) continue;
+            if (val != null) map.put(key, val);
+        }
+        return Collections.unmodifiableMap(map);
     }
 }

@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -30,7 +31,7 @@ public class UserProfileController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/updateuserprofiles")
+    @PatchMapping("/updateuserprofiles")
     public ResponseEntity<ApiResponse> updateUserProfile(@RequestBody UserProfileDto userProfileDto) {
         log.info("Received request to update user profile: {}", userProfileDto);
         ApiResponse response = userProfileService.updateUserProfile(userProfileDto);
@@ -64,4 +65,18 @@ public class UserProfileController {
         ApiResponse response = userProfileService.handleGuestLogin(new GuestLoginRequestDto());
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/profile-pic")
+    public ResponseEntity<ApiResponse> updateProfilePic(
+            @RequestParam UUID userId,
+            @RequestBody Map<String, String> requestBody) {
+
+        String newPicUrl = requestBody.get("profilePic");
+
+        log.info("Received request to update profile pic for userId: {}", userId);
+
+        ApiResponse response = userProfileService.updateProfilePic(userId, newPicUrl);
+        return ResponseEntity.ok(response);
+    }
+
 }
