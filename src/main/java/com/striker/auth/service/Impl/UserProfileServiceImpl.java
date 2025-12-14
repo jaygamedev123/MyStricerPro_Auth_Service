@@ -300,11 +300,8 @@ public class UserProfileServiceImpl implements IUserProfileService {
                     // add other custom claims if needed, e.g. "roles": List.of("player")
             );
 
-            // subject should be a stable identifier: use UUID string or user id string
-            String subject = userProfile.getUserId().toString();
-
             // generate RS256 token (JwtService reads private key and signs)
-            String jwt = jwtService.generateToken(claims, subject);
+            String jwt = jwtService.generateToken(userProfile.getUserId(), claims);
 
             return ApiResponse.success(
                     Map.of(
@@ -363,11 +360,9 @@ public class UserProfileServiceImpl implements IUserProfileService {
                     "isGuest", true
             );
 
-            // Use userId as the JWT "sub" (subject)
-            String subject = user.getUserId().toString();
 
             // Generate RS256 JWT
-            String jwt = jwtService.generateToken(claims, subject);
+            String jwt = jwtService.generateToken(user.getUserId(), claims);
 
             // Response
             return ApiResponse.success(
