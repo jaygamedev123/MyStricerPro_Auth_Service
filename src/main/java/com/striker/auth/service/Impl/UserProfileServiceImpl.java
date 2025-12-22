@@ -292,18 +292,26 @@ public class UserProfileServiceImpl implements IUserProfileService {
             // Save user
             userProfile = userProfileRepo.save(userProfile);
 
-            // Generate JWT
-            String jwt = jwtService.generateTokenForUser(userProfile, request.provider());
-            Map<String, Object> responseMap = buildSafeMap(
-                    "userId", userProfile.getUserId(),
+            // build token claims you want to include
+            Map<String, Object> claims = Map.of(
                     "email", userProfile.getEmail(),
-                    "fullName", userProfile.getFullName(),
-                    "username", userProfile.getUsername(),
-                    "jwt", jwt,
+                    "fullname", userProfile.getFullName(),
                     "provider", request.provider()
+                    // add other custom claims if needed, e.g. "roles": List.of("player")
             );
 
-            return ApiResponse.success(responseMap);
+            // generate RS256 token (JwtService reads private key and signs)
+            String jwt = jwtService.generateToken(userProfile.getUserId(), claims);
+
+            return ApiResponse.success(
+                    Map.of(
+                            "userId", userProfile.getUserId(),
+                            "email", userProfile.getEmail(),
+                            "fullname", userProfile.getFullName(),
+                            "jwt", jwt,
+                            "provider", request.provider()
+                    )
+            );
 
         } catch (DataIntegrityViolationException ex) {
             // In case DB unique constraint catches duplicates
@@ -345,8 +353,16 @@ public class UserProfileServiceImpl implements IUserProfileService {
             // Save user
             user = userProfileRepo.save(user);
 
-            // Create JWT
-            String jwt = jwtService.generateTokenForUser(user, "GUEST");
+            // Build claims for the JWT
+            Map<String, Object> claims = Map.of(
+                    "username", user.getUsername(),
+                    "provider", "GUEST",
+                    "isGuest", true
+            );
+
+
+            // Generate RS256 JWT
+            String jwt = jwtService.generateToken(user.getUserId(), claims);
 
             // Response
             return ApiResponse.success(
