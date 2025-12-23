@@ -301,7 +301,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
             );
 
             // generate RS256 token (JwtService reads private key and signs)
-            String jwt = jwtService.generateToken(userProfile.getUserId(), claims);
+            String jwt = jwtService.generateToken(userProfile.getUserId());
 
             return ApiResponse.success(
                     Map.of(
@@ -362,7 +362,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
 
 
             // Generate RS256 JWT
-            String jwt = jwtService.generateToken(user.getUserId(), claims);
+            String jwt = jwtService.generateToken(user.getUserId());
 
             // Response
             return ApiResponse.success(

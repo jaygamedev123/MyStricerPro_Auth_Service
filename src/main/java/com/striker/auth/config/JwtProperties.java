@@ -12,10 +12,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "auth.jwt")
 public class JwtProperties {
 
-    private Resource privateKeyFile;
-    private Resource publicKeyFile;
-    private String privateKeyB64;
-    private String publicKeyB64;
+    private String privateKey;
     private String issuer;
     private String audience;
     private String kid;
